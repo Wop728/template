@@ -3,23 +3,18 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const path = url.pathname;
   
-  // 解析请求体，添加错误处理
   const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
 
-  // 工具函数：密码哈希处理
   const toHex = async (str) => {
     const enc = new TextEncoder().encode(str);
     const buf = await crypto.subtle.digest('SHA-256', enc);
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
-  // 工具函数：JWT签名
   const jwtSign = async (payload) => {
-    // 检查JWT_SECRET是否配置
     if (!env.JWT_SECRET) {
-      throw new Error('JWT_SECRET environment variable not configured');
+      throw new Error('JWT_SECRET is not configured');
     }
-    
     const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
     const payload64 = btoa(JSON.stringify(payload));
     const data = `${header}.${payload64}`;
@@ -35,13 +30,11 @@ export async function onRequest(context) {
     return `${data}.${sig}`;
   };
 
-  // 工具函数：JWT验证
   const jwtVerify = async (token) => {
     try {
       if (!env.JWT_SECRET) {
-        throw new Error('JWT_SECRET environment variable not configured');
+        throw new Error('JWT_SECRET is not configured');
       }
-      
       const [data, sig] = [token.split('.').slice(0, 2).join('.'), token.split('.').pop()];
       const key = await crypto.subtle.importKey(
         'raw', 
@@ -59,41 +52,30 @@ export async function onRequest(context) {
     }
   };
 
-  // 注册接口 - 使用精确路径匹配
   if (path === '/api/auth/register' && request.method === 'POST') {
     try {
       const { username, password } = body;
-      
-      // 验证请求数据
       if (!username || !password) {
         return new Response(
           JSON.stringify({ error: 'Missing username or password' }), 
           { status: 400, headers: { 'Content-Type': 'application/json' } }
         );
       }
-
-      // 密码哈希处理
       const password_hash = await toHex(password);
-      
-      // 检查用户是否已存在
       const exists = await env.MATCH_DB
         .prepare('SELECT id FROM users WHERE username = ?')
         .bind(username)
         .all();
-      
       if (exists.results && exists.results.length > 0) {
         return new Response(
           JSON.stringify({ error: 'Username already exists' }), 
           { status: 400, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      
-      // 插入新用户
       await env.MATCH_DB
         .prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)')
         .bind(username, password_hash)
         .run();
-      
       return new Response(
         JSON.stringify({ ok: true, message: 'Registration successful' }), 
         { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -107,38 +89,32 @@ export async function onRequest(context) {
     }
   }
 
-  // 登录接口 - 使用精确路径匹配
   if (path === '/api/auth/login' && request.method === 'POST') {
     try {
       const { username, password } = body;
-      
       if (!username || !password) {
         return new Response(
           JSON.stringify({ error: 'Missing username or password' }), 
           { status: 400, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      
       const password_hash = await toHex(password);
       const r = await env.MATCH_DB
         .prepare('SELECT id, username FROM users WHERE username = ? AND password_hash = ?')
         .bind(username, password_hash)
         .all();
-      
       if (!r || !r.results || r.results.length === 0) {
         return new Response(
           JSON.stringify({ error: 'Invalid username or password' }), 
           { status: 401, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      
       const user = r.results[0];
       const token = await jwtSign({ 
         id: user.id, 
         username: user.username, 
         iat: Date.now() 
       });
-      
       return new Response(
         JSON.stringify({ ok: true, token }), 
         { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -152,10 +128,8 @@ export async function onRequest(context) {
     }
   }
 
-  // 未匹配的路由
   return new Response(
     JSON.stringify({ error: 'Unknown API path' }), 
     { status: 404, headers: { 'Content-Type': 'application/json' } }
   );
 }
-    
