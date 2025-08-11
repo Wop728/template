@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>匹配服务平台（Cloudflare Demo）</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>匹配服务平台（Demo）</h3>
+    <div>
+      <button id="btnLogin" class="btn btn-outline-primary btn-sm">登录</button>
+      <button id="btnRegister" class="btn btn-outline-secondary btn-sm">注册</button>
+      <button id="btnLogout" class="btn btn-outline-danger btn-sm d-none">退出</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-4 mb-3">
+      <div class="card p-3">
+        <h5>发布信息</h5>
+        <div class="mb-2">
+          <label class="form-label">类型</label>
+          <select id="type" class="form-select"><option value="supply">供给</option><option value="demand">需求</option></select>
+        </div>
+        <div class="mb-2"><input id="title" class="form-control" placeholder="标题"></div>
+        <div class="mb-2"><textarea id="content" class="form-control" rows="3" placeholder="描述"></textarea></div>
+        <div class="mb-2"><input id="keywords" class="form-control" placeholder="关键词，逗号分隔（例如：葡萄,鲜果）"></div>
+        <div class="d-grid"><button id="btnPublish" class="btn btn-primary">发布</button></div>
+        <div id="pubMsg" class="mt-2 text-success"></div>
+      </div>
+
+      <div class="card mt-3 p-3">
+        <h6>我的发布</h6>
+        <div id="myPosts"></div>
+      </div>
+    </div>
+
+    <div class="col-md-8">
+      <div class="card p-3 mb-3">
+        <div class="input-group">
+          <input id="searchInput" class="form-control" placeholder="搜索关键词（例如：葡萄）">
+          <button id="btnSearch" class="btn btn-outline-primary">搜索</button>
+        </div>
+      </div>
+
+      <div id="results" class="row gy-3"></div>
+    </div>
+  </div>
+</div>
+
+<!-- modals -->
+<div class="modal fade" id="authModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="authTitle">登录</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input id="authUser" class="form-control mb-2" placeholder="用户名"><input id="authPass" type="password" class="form-control" placeholder="密码"></div><div class="modal-footer"><button id="authSubmit" class="btn btn-primary">提交</button></div></div></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const API_ROOT = '/api'; // Pages Functions are under /api/*
+function getToken(){return localStorage.getItem('token');}
+function setToken(t){ if(t) { localStorage.setItem('token', t); document.getElementById('btnLogout').classList.remove('d-none'); } else { localStorage.removeItem('token'); document.getElementById('btnLogout').classList.add('d-none'); } }
+document.getElementById('btnLogin').addEventListener('click', ()=>{ showAuth('login'); });
+document.getElementById('btnRegister').addEventListener('click', ()=>{ showAuth('register'); });
+document.getElementById('btnLogout').addEventListener('click', ()=>{ setToken(null); location.reload(); });
+
+function showAuth(mode){ const modal = new bootstrap.Modal(document.getElementById('authModal')); document.getElementById('authTitle').innerText = mode==='login'?'登录':'注册'; document.getElementById('authSubmit').onclick = ()=>authSubmit(mode); modal.show(); }
+async function authSubmit(mode){ const user = document.getElementById('authUser').value, pass = document.getElementById('authPass').value; if(!user||!pass) return alert('请输入用户名和密码'); const url = API_ROOT + '/auth/' + (mode==='login'?'login':'register'); const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:user, password:pass})}); const data = await res.json(); if(data.token){ setToken(data.token); alert('登录成功'); } else if(data.ok){ alert(data.message||'注册成功'); } else { alert(data.error || data.message); } location.reload(); }
+
+document.getElementById('btnPublish').addEventListener('click', async ()=>{
+  const token = getToken(); if(!token){ alert('请先登录'); return; }
+  const type = document.getElementById('type').value, title=document.getElementById('title').value, content=document.getElementById('content').value, keywords=document.getElementById('keywords').value;
+  if(!title||!keywords) return alert('请填写标题和关键词');
+  const res = await fetch(API_ROOT + '/messages/publish', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify({type,title,content,keywords})});
+  const data = await res.json(); if(data.ok){ document.getElementById('pubMsg').innerText='发布成功'; loadMyPosts(); } else { alert(data.error || data.message); }
+});
+
+async function loadMyPosts(){
+  const token = getToken(); if(!token) return;
+  const res = await fetch(API_ROOT + '/messages/my', {headers:{'Authorization':'Bearer '+token}});
+  const data = await res.json(); const el = document.getElementById('myPosts'); el.innerHTML=''; (data.results||[]).forEach(it=>{ const div=document.createElement('div'); div.className='mb-2'; div.innerHTML=`<b>${it.title}</b><div class="text-muted">${it.keywords}</div>`; el.appendChild(div); });
+}
+
+document.getElementById('btnSearch').addEventListener('click', async ()=>{
+  const q = document.getElementById('searchInput').value;
+  const res = await fetch(API_ROOT + '/messages/search?q=' + encodeURIComponent(q)); const data = await res.json();
+  const container = document.getElementById('results'); container.innerHTML='';
+  (data.results||[]).forEach(it=>{
+    const col = document.createElement('div'); col.className='col-md-6';
+    col.innerHTML = `<div class="card p-3"><h5>${it.title} <small class="text-muted">[${it.type}]</small></h5><div>${it.content||''}</div><div class="mt-2"><small class="text-muted">关键词: ${it.keywords}</small></div><div class="mt-2"><button class="btn btn-sm btn-outline-primary" onclick="doMatch(${it.id})">匹配</button></div></div>`;
+    container.appendChild(col);
+  });
+});
+
+async function doMatch(id){
+  const res = await fetch(API_ROOT + '/match/auto?message_id=' + id);
+  const data = await res.json();
+  alert('找到 ' + (data.matched? data.matched.length : (data.matched || []).length) + ' 条匹配（查看控制台）'); console.log(data);
+}
+
+window.addEventListener('load', ()=>{ if(getToken()) document.getElementById('btnLogout').classList.remove('d-none'); loadMyPosts(); });
+</script>
+</body>
+</html>
