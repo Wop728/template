@@ -3,6 +3,19 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const path = url.pathname;
   
+  // 通用响应头（解决CORS问题）
+  const headers = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*', // 开发环境允许所有域名，生产环境需指定具体域名
+    'Access-Control-Allow-Methods': 'POST, OPTIONS', // 允许POST和预检请求
+    'Access-Control-Allow-Headers': 'Content-Type' // 允许JSON类型的请求体
+  };
+  
+  // 处理预检请求（浏览器会先发送OPTIONS请求验证跨域）
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { headers });
+  }
+  
   const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
 
   const toHex = async (str) => {
@@ -58,7 +71,7 @@ export async function onRequest(context) {
       if (!username || !password) {
         return new Response(
           JSON.stringify({ error: 'Missing username or password' }), 
-          { status: 400, headers: { 'Content-Type': 'application/json' } }
+          { status: 400, headers }
         );
       }
       const password_hash = await toHex(password);
@@ -69,7 +82,7 @@ export async function onRequest(context) {
       if (exists.results && exists.results.length > 0) {
         return new Response(
           JSON.stringify({ error: 'Username already exists' }), 
-          { status: 400, headers: { 'Content-Type': 'application/json' } }
+          { status: 400, headers }
         );
       }
       await env.MATCH_DB
@@ -78,13 +91,13 @@ export async function onRequest(context) {
         .run();
       return new Response(
         JSON.stringify({ ok: true, message: 'Registration successful' }), 
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
+        { status: 200, headers }
       );
     } catch (e) {
       console.error('Registration error:', e);
       return new Response(
         JSON.stringify({ error: 'Internal server error', details: e.message }), 
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { status: 500, headers }
       );
     }
   }
@@ -95,7 +108,7 @@ export async function onRequest(context) {
       if (!username || !password) {
         return new Response(
           JSON.stringify({ error: 'Missing username or password' }), 
-          { status: 400, headers: { 'Content-Type': 'application/json' } }
+          { status: 400, headers }
         );
       }
       const password_hash = await toHex(password);
@@ -106,7 +119,7 @@ export async function onRequest(context) {
       if (!r || !r.results || r.results.length === 0) {
         return new Response(
           JSON.stringify({ error: 'Invalid username or password' }), 
-          { status: 401, headers: { 'Content-Type': 'application/json' } }
+          { status: 401, headers }
         );
       }
       const user = r.results[0];
@@ -117,19 +130,19 @@ export async function onRequest(context) {
       });
       return new Response(
         JSON.stringify({ ok: true, token }), 
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
+        { status: 200, headers }
       );
     } catch (e) {
       console.error('Login error:', e);
       return new Response(
         JSON.stringify({ error: 'Internal server error', details: e.message }), 
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { status: 500, headers }
       );
     }
   }
 
   return new Response(
     JSON.stringify({ error: 'Unknown API path' }), 
-    { status: 404, headers: { 'Content-Type': 'application/json' } }
+    { status: 404, headers }
   );
 }
