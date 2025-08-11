@@ -1,0 +1,5 @@
+name = "cloudflare-match-platform"
+compatibility_date = "2025-08-11"
+type = "javascript"
+
+# For Pages deploy, functions are deployed by Pages automatically.
